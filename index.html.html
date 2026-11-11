@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ms"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>LAJAK RACING: MALAYSIA EDITION</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+html,body{margin:0;height:100%;background:#000;color:#fff;font-family:Impact,'Arial Narrow',Arial,sans-serif;overflow:hidden}
+#app{position:relative;width:100%;height:100%;max-width:1100px;margin:auto;display:flex;flex-direction:column;background:#0a0a0c}
+#cv{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
+#ctl{display:none;gap:10px;padding:8px;height:84px}
+#ctl button{flex:1;font-size:clamp(20px,5vw,32px);touch-action:none}
+#ui{position:absolute;inset:0;overflow:auto;padding:10px;text-align:center;background:radial-gradient(circle at 50% 0,#3a060c,#0a0a0c 65%)}
+button{font:inherit;color:#fff;border:0;border-radius:8px;padding:10px 14px;background:linear-gradient(#e11d2e,#8a0a14);letter-spacing:1px;cursor:pointer;border-bottom:3px solid #4a0408}
+button:active{transform:translateY(2px)}button:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(1)}button.g{background:linear-gradient(#444,#222);border-bottom-color:#000}
+button.sm{padding:6px 10px;font-size:14px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;max-width:560px;margin-left:auto;margin-right:auto}
+.top b{background:#000a;padding:6px 12px;border-radius:20px;border:1px solid #e11d2e}
+.logo{font-size:clamp(34px,9vw,60px);line-height:.95;font-style:italic;text-shadow:3px 3px 0 #e11d2e}
+.logo small{display:block;font-size:.3em;letter-spacing:4px;color:#e11d2e;text-shadow:none}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:520px;margin:10px auto}
+.grid .w{grid-column:1/3;font-size:26px;padding:14px}
+.card{background:#16161ccc;border:1px solid #333;border-radius:12px;padding:10px;margin:8px auto;max-width:560px;text-align:left}
+.row{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.bar{height:8px;background:#333;border-radius:4px;overflow:hidden;margin:2px 0 6px}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#1e90ff,#6cf)}
+#pv{width:100%;max-width:340px;background:#0006;border-radius:12px}
+.sw{width:30px;height:30px;border-radius:50%;border:2px solid #555;padding:0}.sw.on{border-color:#fff}
+.pip{letter-spacing:2px;color:#e11d2e}
+#toast{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#e11d2e;padding:8px 16px;border-radius:20px;display:none;z-index:9;white-space:nowrap}
+h2{margin:6px}
+</style></head><body>
+<div id="app"><canvas id="cv" width="800" height="450"></canvas>
+<div id="ctl"><button id="bn" class="g">🔥 NITRO</button><button id="bs">⬆ SHIFT</button></div>
+<div id="ui"></div><div id="toast"></div></div>
+<script>
+const $=id=>document.getElementById(id),cv=$('cv'),ui=$('ui');
+const BK=[
+{id:'bmx',n:'BMX Kampung',price:0,acc:3.3,top:14.5,gr:.6,wt:11,c:'#e11d2e'},
+{id:'road',n:'Road Bike',price:1800,acc:3.2,top:18.5,gr:.6,wt:9,c:'#1e90ff'},
+{id:'std',n:'Lajak Standard',price:4500,acc:4,top:16.5,gr:.75,wt:13,c:'#22c55e'},
+{id:'mod',n:'Lajak Modified',price:14000,acc:4.6,top:18.5,gr:.85,wt:12,c:'#f5c400'},
+{id:'pro',n:'Racing Premium',price:40000,acc:5.3,top:20.5,gr:.95,wt:8,c:'#a855f7'}];
+const CP=['gear','crank','rim','tyre','frame','chain'];
+const CN={gear:['Gear','Kelajuan maks +5%'],crank:['Crankset','Pecutan +6%'],rim:['Rim','Berat -1.5%'],tyre:['Tayar','Cengkaman +5%'],frame:['Frame','Berat -2.5%'],chain:['Chain','Kecekapan kuasa +3%']};
+const COLS=['#e11d2e','#ffffff','#1e90ff','#22c55e','#f5c400','#a855f7'],DEC=['Tiada','Stripe','Bintang','Api'];
+const RIM=['#777','#aab','#4af','#fc3','#f55','#fff'];
+const CATS=[{n:'Beginner',sk:.85,rw:150,lv:1},{n:'Amateur',sk:1,rw:300,lv:2},{n:'Pro',sk:1.2,rw:600,lv:4},{n:'Elite',sk:1.5,rw:1100,lv:6}];
+const DS=[100,200,400],DF=[1,1.7,3],GF=[.3,.5,.68,.85,1],GA=[1,.9,.8,.72,.65];
+const ACH=[{id:'w1',t:'Menang perlumbaan pertama',ok:()=>S.wins>=1,r:300},{id:'w5',t:'5 kemenangan',ok:()=>S.wins>=5,r:800},{id:'w15',t:'15 kemenangan',ok:()=>S.wins>=15,r:2000},{id:'b3',t:'Miliki 3 basikal',ok:()=>Object.keys(S.own).length>=3,r:1000},{id:'mx',t:'Upgrade satu komponen ke Lv5',ok:()=>Object.values(S.up).some(u=>CP.some(k=>u[k]>=5)),r:1500},{id:'ch',t:'Juara Championship',ok:()=>S.champ,r:3000}];
+let S,scr='menu',PV='bmx',gi=0,selD=0,R=null,T=0,AX,tt;const K='lajak_my_v1';
+function load(){try{S=JSON.parse(localStorage.getItem(K))}catch(e){}if(!S||!S.own)S={coins:500,xp:0,own:{bmx:1},sel:'bmx',up:{},col:{},dec:{},wins:0,daily:'',ach:{},snd:1}}
+function save(){try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}}
+const getUp=id=>S.up[id]||(S.up[id]={gear:0,crank:0,rim:0,tyre:0,frame:0,chain:0}),lv=()=>1+Math.floor(S.xp/120),day=()=>new Date(Date.now()+8*60*60*1000).toISOString().slice(0,10);
+function stats(id,u){const b=BK.find(x=>x.id===id),lw=1-.015*u.rim-.025*u.frame,ef=1+.03*u.chain;
+return{acc:b.acc*(1+.06*u.crank)/lw*ef,top:b.top*(1+.05*u.gear)*(1+.01*u.chain),grip:Math.min(1,b.gr+.05*u.tyre),wt:b.wt*lw}}
+const ucost=(id,l)=>Math.round(120*(1+BK.findIndex(b=>b.id===id)*.6)*(l+1)**2);
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(tt);tt=setTimeout(()=>t.style.display='none',2500)}
+function beep(f,d){if(!S.snd)return;try{AX=AX||new(window.AudioContext||window.webkitAudioContext)();const o=AX.createOscillator(),g=AX.createGain();o.frequency.value=f;o.type='square';g.gain.value=.05;o.connect(g);g.connect(AX.destination);o.start();o.stop(AX.currentTime+d)}catch(e){}}
+function chk(){ACH.forEach(a=>{if(!S.ach[a.id]&&a.ok()){S.ach[a.id]=1;S.coins+=a.r;toast('🏅 '+a.t+' +'+a.r)}});save()}
+/* ---------- BIKE DRAWING ---------- */
+function bikeObj(id){const u=getUp(id),b=BK.find(x=>x.id===id);return{col:S.col[id]||b.c,rim:u.rim,tyre:u.tyre,crank:u.crank,frame:u.frame,chain:u.chain,gear:u.gear,decal:S.dec[id]||0}}
+function bike(c,x,y,s,o){c.save();c.translate(x,y);c.scale(s,s);c.lineCap=c.lineJoin='round';
+const r=22,L=88,tw=3+o.tyre*.9,B=[38,-20],Sd=[30,-56],H=[78,-58];
+[0,L].forEach(wx=>{c.save();c.translate(wx,-r);c.strokeStyle='#111';c.lineWidth=tw;c.beginPath();c.arc(0,0,r,0,7);c.stroke();c.strokeStyle=RIM[o.rim];c.lineWidth=2.5;c.beginPath();c.arc(0,0,r-tw/2-1,0,7);c.stroke();c.lineWidth=1;c.rotate(o.wr||0);for(let i=0;i<8;i++){c.rotate(Math.PI/4);c.beginPath();c.moveTo(0,0);c.lineTo(r-5,0);c.stroke()}c.restore()});
+const P=(p,w,col)=>{c.strokeStyle=col;c.lineWidth=w;c.beginPath();p.forEach((q,i)=>i?c.lineTo(q[0],q[1]):c.moveTo(q[0],q[1]));c.stroke()};
+c.fillStyle=RIM[o.gear];c.beginPath();c.arc(0,-r,4+o.gear*.8,0,7);c.fill();
+P([[0,-r],B],2.5,RIM[o.chain]);P([[0,-r],Sd,H,B,Sd],4+o.frame*.5,o.col);P([H,[L,-r]],4,o.col);P([H,[H[0]-2,-70],[H[0]+9,-72]],3,'#ccc');
+if(o.decal==1)P([[34,-30],[70,-52]],3,'#fff');
+c.fillStyle='#fc0';if(o.decal==2){c.font='16px Arial';c.fillText('★',46,-36)}if(o.decal==3){c.font='15px Arial';c.fillText('🔥',44,-34)}
+const cl=12+o.crank,a=o.ph||0,pa=[B[0]+Math.cos(a)*cl,B[1]+Math.sin(a)*cl],pb=[B[0]-Math.cos(a)*cl,B[1]-Math.sin(a)*cl];
+P([B,pa],3,RIM[o.crank]);P([B,pb],3,RIM[o.crank]);
+const hip=[Sd[0]-2,-62],sh=[62,-92];
+const leg=(p,col)=>{const dx=p[0]-hip[0],dy=p[1]-hip[1],d=Math.hypot(dx,dy)||1;P([hip,[(hip[0]+p[0])/2+dy/d*8,(hip[1]+p[1])/2-dx/d*8],p],6,col)};
+leg(pb,'#333');P([hip,sh],9,'#f5f5f5');P([sh,[H[0]+6,-70]],4,'#f5f5f5');leg(pa,'#111');
+c.fillStyle='#e11d2e';c.beginPath();c.arc(68,-104,8,0,7);c.fill();c.restore()}
+function flame(c,x,y,s){c.save();c.translate(x,y);const L=(40+Math.random()*30)*s,g=c.createLinearGradient(0,0,-L,0);g.addColorStop(0,'#fff');g.addColorStop(.3,'#ff9500');g.addColorStop(1,'rgba(255,0,0,0)');c.fillStyle=g;c.beginPath();c.moveTo(0,-5);c.lineTo(-L,0);c.lineTo(0,5);c.fill();c.restore()}
+function prev(q){const c=q.getContext('2d');c.clearRect(0,0,340,180);const g=c.createRadialGradient(170,150,10,170,150,150);g.addColorStop(0,'#e11d2e66');g.addColorStop(1,'rgba(0,0,0,0)');c.fillStyle=g;c.fillRect(0,0,340,180);c.fillStyle='#222';c.beginPath();c.ellipse(170,152,120,10,0,0,7);c.fill();bike(c,104,150,1.5,{...bikeObj(PV),ph:T*4,wr:T*5})}
+/* ---------- RACE ENGINE ---------- */
+const vmaxg=e=>e.st.top*GF[e.g-1]*(e.nitOn?1.12:1),rpmOf=e=>Math.min(8200,1000+7000*e.v/vmaxg(e));
+const mkE=(st,ai)=>({st,ai,d:0,v:0,g:1,ph:0,wr:0,pen:0,boost:0,nit:1,nitOn:0,fin:null,react:.12+Math.random()*.35,tgt:7100,useN:0});
+const pickTarget=()=>Math.random()<.18?(Math.random()<.5?4800+Math.random()*700:7950):6800+Math.random()*850;
+function startRace(cfg){const id=S.sel,st=stats(id,getUp(id));
+R={cfg,dist:cfg.dist,cd:3.99,n:4,ph:'count',clock:0,p:mkE(st,0),o:mkE({acc:3.5*cfg.sk,top:16*cfg.sk**.6,grip:.8},1),msg:null,over:0,win:0};
+R.p.bo=bikeObj(id);R.o.bo={col:COLS[Math.floor(Math.random()*6)],rim:Math.floor(Math.random()*4),tyre:1,crank:1,frame:1,chain:1,gear:1,decal:Math.floor(Math.random()*4)};
+R.o.tgt=pickTarget();R.o.useN=cfg.sk>1.05;scr='race';ui.style.display='none';$('ctl').style.display='flex'}
+function doShift(e){if(e.g>=5)return null;const rpm=rpmOf(e);let q;
+if(rpm>=6800&&rpm<=7700){q='PERFECT';e.boost=1}else if(rpm>=5800&&rpm<=7950){q='GOOD';e.boost=.35}else{q='BAD';e.pen=.9;e.v*=.96}
+e.g++;return q}
+function shiftP(){const p=R.p,q=doShift(p);if(!q)return;R.msg={t:q+(q=='PERFECT'?'!':''),c:q=='PERFECT'?'#4f4':q=='GOOD'?'#fc0':'#f55',l:1};beep(q=='BAD'?150:q=='GOOD'?500:800,.12)}
+function phys(e,dt){const vm=vmaxg(e),r=e.v/vm;let a=e.st.acc*GA[e.g-1]*(1.15-.9*Math.min(r,1.3));
+if(r>.97)a*=.15;if(e.v<4)a*=.7+.3*e.st.grip;
+if(e.pen>0){a*=.55;e.pen-=dt}if(e.boost>0){a*=1.3;e.boost-=dt}
+if(e.nitOn&&e.nit>0){a*=1.6;e.nit-=dt*.4}else e.nitOn=0;
+e.v=Math.max(0,e.v+a*dt);e.d+=e.v*dt;e.ph+=dt*(3+e.v*.9);e.wr+=1.36*e.v*dt}
+function stepRace(dt){const p=R.p,o=R.o;if(R.msg)R.msg.l-=dt*1.4;
+if(R.ph==='count'){R.cd-=dt;const n=Math.ceil(R.cd);if(n!==R.n){R.n=n;if(n>0&&n<4)beep(440,.15)}if(R.cd<=0){R.ph='go';beep(988,.5);R.msg={t:'GO!',c:'#4f4',l:1}}p.ph+=dt*2;o.ph+=dt*2;return}
+R.clock+=dt;
+for(const e of[p,o]){if(e.fin==null){if(e.ai){if(R.clock<e.react)continue;if(e.g<5&&rpmOf(e)>=e.tgt){doShift(e);e.tgt=pickTarget()}if(e.useN&&!e.nitOn&&e.nit>0&&e.d>R.dist*.3)e.nitOn=1}
+phys(e,dt);if(e.d>=R.dist){e.fin=R.clock-(e.d-R.dist)/Math.max(e.v,.5);e.nitOn=0;if(e===p)R.msg={t:'FINISH!',c:'#fc0',l:1}}}
+else{e.v=Math.max(0,e.v-dt*5);e.d+=e.v*dt;e.ph+=dt*e.v*.5;e.wr+=1.36*e.v*dt}}
+if(!R.over){const a=p.fin,b=o.fin,f=Math.min(a==null?1e9:a,b==null?1e9:b);
+if((a!=null&&b!=null)||(f<1e9&&R.clock-f>1.6)||R.clock>120){R.over=1;R.win=a!=null&&(b==null||a<=b);setTimeout(finish,1400)}}}
+const fmt=t=>t==null?'Tidak sempat':t.toFixed(2)+' s';
+function finish(){if(R.done)return;R.done=1;const p=R.p,o=R.o,cf=R.cfg,win=R.win,full=Math.round(cf.rw*(cf.champ?1:DF[cf.di]));
+let rew=win?full:Math.round(full*.25),xp=win?60:15,note='',next=null,l0=lv();
+if(win){S.wins++;if(cf.champ){if(cf.r<2)next=cf.r+1;else{rew+=5000;S.champ=1;note='🏆 JUARA CHAMPIONSHIP! Bonus +5,000'}}}else if(cf.champ)note='Anda tersingkir dari Championship.';
+S.coins+=rew;S.xp+=xp;if(lv()>l0)note+=(note?'<br>':'')+'⭐ LEVEL UP! LV '+lv();
+R.res={win,rew,xp,note,next,pt:fmt(p.fin),ot:fmt(o.fin)};chk();scr='res';render()}
+function drawRace(){const c=cv.getContext('2d'),W=800,H=450,p=R.p,o=R.o,cam=p.d,PM=30,off=250,m=(a,b)=>((a%b)+b)%b;
+let g=c.createLinearGradient(0,0,0,H);g.addColorStop(0,'#06070f');g.addColorStop(.38,'#1b1425');g.addColorStop(.381,'#2c2c32');g.addColorStop(1,'#141418');c.fillStyle=g;c.fillRect(0,0,W,H);
+c.fillStyle='#0d0d12';c.fillRect(0,90,W,80);
+for(let i=0;i<70;i++){c.globalAlpha=.6;c.fillStyle=['#e11d2e','#fff','#666','#f5c400'][i%4];c.fillRect(m(i*17-cam*PM*.25,1190)-100,100+(i*7%6)*11,6,6)}c.globalAlpha=1;
+for(let i=0;i<5;i++){const x=m(i*260-cam*PM*.4,1300)-150;c.fillStyle='#333';c.fillRect(x,40,4,130);c.fillStyle='#fffbe0';c.fillRect(x-14,32,32,8)}
+c.fillStyle='#e11d2e';c.fillRect(0,168,W,7);c.fillStyle='#fff';for(let i=0;i<30;i++)c.fillRect(m(i*40-cam*PM,1200)-40,168,20,7);
+c.globalAlpha=.5;for(const y of[305,397])for(let i=0;i<40;i++)c.fillRect(m(i*60-cam*PM,2400)-100,y,30,3);c.globalAlpha=1;
+const ln=d=>{const x=off+(d-cam)*PM+90;if(x<-20||x>W+20)return;for(let i=0;i<14;i++){c.fillStyle=i%2?'#fff':'#000';c.fillRect(x,178+i*16,8,16)}};ln(0);ln(R.dist);
+const k=p.v/p.st.top;if(k>.45){c.fillStyle='rgba(255,255,255,'+(.05+.1*k)+')';for(let i=0;i<16;i++)c.fillRect(Math.random()*W,185+Math.random()*210,60+k*220,2)}
+const ent=(e,x,y,s)=>{c.fillStyle='rgba(0,0,0,.4)';c.beginPath();c.ellipse(x+45*s,y+2,60*s,5*s,0,0,7);c.fill();if(e.nitOn)flame(c,x-4,y-30*s,s);bike(c,x,y,s,{...e.bo,ph:e.ph,wr:e.wr})};
+ent(o,Math.max(-150,Math.min(W+50,off+(o.d-p.d)*PM)),298,.85);ent(p,off,388,1);
+/* HUD */
+c.fillStyle='#0008';c.fillRect(60,12,680,10);c.fillStyle='#e11d2e';c.fillRect(60,12,680*Math.min(1,p.d/R.dist),10);c.fillStyle='#4af';c.beginPath();c.arc(60+680*Math.min(1,o.d/R.dist),17,6,0,7);c.fill();
+c.fillStyle='#fff';c.textAlign='left';c.font='18px Impact,Arial';c.fillText(R.cfg.name+' · '+R.dist+'m',20,48);c.font='bold 38px Impact,Arial';c.fillText(Math.round(p.v*3.6)+' KM/J',20,90);
+c.font='18px Impact,Arial';c.fillText(Math.round(Math.max(0,R.dist-p.d))+' m lagi   '+R.clock.toFixed(2)+' s',20,120);
+const gx=700,gy=370,gr=52,ang=v=>Math.PI*.75+v/8000*Math.PI*1.5;
+c.fillStyle='#000a';c.beginPath();c.arc(gx,gy,gr+10,0,7);c.fill();c.lineWidth=7;
+[[0,8000,'#444'],[6800,7700,'#2c4'],[7700,8000,'#e22']].forEach(z=>{c.strokeStyle=z[2];c.beginPath();c.arc(gx,gy,gr,ang(z[0]),ang(z[1]));c.stroke()});
+const rp=R.ph==='count'?2500+1800*Math.sin(T*14):rpmOf(p);c.strokeStyle='#fff';c.lineWidth=3;c.beginPath();c.moveTo(gx,gy);c.lineTo(gx+Math.cos(ang(rp))*(gr-6),gy+Math.sin(ang(rp))*(gr-6));c.stroke();
+c.fillStyle='#fff';c.textAlign='center';c.font='bold 36px Impact,Arial';c.fillText(p.g,gx,gy+14);c.font='12px Arial';c.fillText('GEAR  RPM x1000',gx,gy+34);
+c.textAlign='left';c.font='14px Impact,Arial';c.fillText('NITRO',20,415);c.fillStyle='#333';c.fillRect(20,421,150,10);c.fillStyle='#ff9500';c.fillRect(20,421,150*Math.max(0,p.nit),10);
+c.textAlign='center';
+if(R.ph==='count'){c.fillStyle='#fff';c.font='bold 90px Impact,Arial';c.fillText(R.n>3?'SEDIA':R.n,W/2,150)}
+else if(R.msg&&R.msg.l>0){c.globalAlpha=Math.min(1,R.msg.l*2);c.fillStyle=R.msg.c;c.font='bold 44px Impact,Arial';c.fillText(R.msg.t,300,330-(1-R.msg.l)*20);c.globalAlpha=1}
+if(R.over){if(R.win){for(let i=0;i<40;i++){c.fillStyle='hsl('+Math.random()*360+',90%,55%)';c.fillRect(Math.random()*W,Math.random()*H,6,10)}c.fillStyle='#4f4';c.font='bold 70px Impact,Arial';c.fillText('MENANG!',W/2,150)}else{c.fillStyle='rgba(0,0,0,.45)';c.fillRect(0,0,W,H);c.fillStyle='#f55';c.font='bold 70px Impact,Arial';c.fillText('KALAH',W/2,150)}}}
+/* ---------- UI ---------- */
+const top=b=>`<div class=top>${b?`<button class=sm onclick="go('menu')">◀ MENU</button>`:'<span></span>'}<b>💰 ${S.coins.toLocaleString()}</b><b>LV ${lv()}</b></div>`;
+function bars(id){const s=stats(id,getUp(id)),r=(n,v,t)=>`<div class=row><span>${n}</span><span>${t}</span></div><div class=bar><i style="width:${Math.max(3,Math.min(100,v))}%"></i></div>`;
+return r('Pecutan',s.acc/10*100,s.acc.toFixed(1))+r('Kelajuan Maks',s.top/27*100,Math.round(s.top*3.6)+' km/j')+r('Cengkaman',s.grip*100,Math.round(s.grip*100))+r('Ringan',(1-s.wt/18)*100,s.wt.toFixed(1)+' kg')}
+const SCR={
+menu:()=>`${top()}<div class=logo>LAJAK RACING<small>MALAYSIA EDITION</small></div><canvas id=pv width=340 height=180></canvas><div class=grid><button class=w onclick="go('sel')">🏁 RACE</button><button onclick="go('garage')">GARAGE</button><button onclick="go('up')">UPGRADES</button><button onclick="go('shop')">SHOP</button><button onclick="go('champ')">🏆 CHAMPIONSHIP</button><button class="g w" onclick="go('set')">⚙ SETTINGS</button>${S.daily!==day()?`<button class=w onclick="daily()">🎁 DAILY REWARD +250</button>`:''}</div>`,
+sel:()=>`${top(1)}<h2>PILIH PERLUMBAAN</h2><div class=card>Jarak: ${DS.map((d,i)=>`<button class="sm ${selD===i?'':'g'}" onclick="selD=${i};render()">${d}m</button>`).join(' ')}</div>${CATS.map((c,i)=>{const lk=lv()<c.lv;return`<div class=card><div class=row><div><b>${c.n} Race</b><br><small>Lawan ${'★'.repeat(i+1)} · Ganjaran 💰 ${Math.round(c.rw*DF[selD])}${lk?' · Perlu LV '+c.lv:''}</small></div><button class=sm ${lk?'':'disabled'} ${lk?'disabled':''} onclick="launch(${i})">${lk?'🔒':'MULA'}</button></div></div>`}).join('')}`,
+garage:()=>{const b=BK[gi],own=S.own[b.id],sel=S.sel===b.id;return`${top(1)}<div class=row style="max-width:560px;margin:auto"><button onclick="gi=(gi+4)%5;PV=BK[gi].id;render()">◀</button><h2>${b.n}</h2><button onclick="gi=(gi+1)%5;PV=BK[gi].id;render()">▶</button></div><canvas id=pv width=340 height=180></canvas><div class=card>${bars(b.id)}</div><div class=card>${own?`Warna: ${COLS.map(c=>`<button class="sw ${(S.col[b.id]||b.c)===c?'on':''}" style="background:${c}" onclick="S.col['${b.id}']='${c}';save();render()"></button>`).join(' ')}<br><br>Decal: ${DEC.map((d,i)=>`<button class="sm ${(S.dec[b.id]||0)===i?'':'g'}" onclick="S.dec['${b.id}']=${i};save();render()">${d}</button>`).join(' ')}`:'Beli basikal ini untuk ubah suai warna & decal.'}</div><button ${sel?'disabled':''} onclick="${own?`pick('${b.id}')`:`buy('${b.id}')`}">${sel?'✔ DIGUNAKAN':own?'PILIH BASIKAL':'BELI 💰 '+b.price.toLocaleString()}</button>`},
+up:()=>{const id=S.sel,b=BK.find(x=>x.id===id),u=getUp(id);return`${top(1)}<h2>${b.n}</h2><canvas id=pv width=340 height=180></canvas><div class=card>${bars(id)}</div>${CP.map(k=>{const l=u[k];return`<div class=card><div class=row><div><b>${CN[k][0]}</b> <span class=pip>${'●'.repeat(l)}${'○'.repeat(5-l)}</span><br><small>${CN[k][1]}</small></div>${l>=5?'<b>MAX</b>':`<button class=sm onclick="upg('${k}')">💰 ${ucost(id,l).toLocaleString()}</button>`}</div></div>`}).join('')}`},
+shop:()=>`${top(1)}<h2>SHOP</h2>${BK.map(b=>`<div class=card><div class=row><div><b>${b.n}</b><br><small>Pecutan ${b.acc} · Maks ${Math.round(b.top*3.6)} km/j · ${b.wt} kg</small></div>${S.own[b.id]?`<button class="sm g" onclick="pick('${b.id}')">${S.sel===b.id?'✔ DIGUNAKAN':'PILIH'}</button>`:`<button class=sm onclick="buy('${b.id}')">💰 ${b.price.toLocaleString()}</button>`}</div></div>`).join('')}`,
+champ:()=>`${top(1)}<h2>🏆 CHAMPIONSHIP</h2><div class=card>3 pusingan berturut-turut (100m, 200m, 400m) dengan lawan makin laju. Kalah = tamat. Ganjaran setiap pusingan + bonus 💰 5,000 untuk juara.<br><br>${lv()<5?'🔒 Perlu LV 5 (anda LV '+lv()+')':`<button onclick="launchChamp(0)">MULA CHAMPIONSHIP</button>`}</div>`,
+set:()=>`${top(1)}<h2>SETTINGS</h2><div class=card><button onclick="S.snd=S.snd?0:1;save();render()">BUNYI: ${S.snd?'ON':'OFF'}</button> <button class=g onclick="if(confirm('Padam semua data?')){localStorage.removeItem(K);load();go('menu')}">RESET DATA</button></div><div class=card><b>Achievements</b><br>${ACH.map(a=>`<div>${S.ach[a.id]?'✅':'⬜'} ${a.t} <small>(+${a.r})</small></div>`).join('')}</div><div class=card><small>Kawalan: SPACE / ↑ = SHIFT, N = NITRO. Tukar gear pada zon HIJAU RPM (6800–7700) untuk PERFECT shift. Terlalu awal/lewat = BAD shift.</small></div>`,
+res:()=>{const r=R.res;return`<div style="margin-top:6vh"><div class=logo style="color:${r.win?'#4f4':'#f55'}">${r.win?'MENANG!':'KALAH'}</div><div class=card style="text-align:center">Masa anda: ${r.pt}<br>Lawan: ${r.ot}<br><br>💰 +${r.rew} coins · XP +${r.xp}${r.note?'<br>'+r.note:''}</div>${r.next!=null?`<button onclick="launchChamp(${r.next})">PUSINGAN SETERUSNYA ▶</button>`:`<button onclick="${R.cfg.champ?'launchChamp(0)':'startRace(R.cfg)'}">${R.cfg.champ?'CUBA LAGI':'RACE LAGI'}</button>`}<br><br><button class=g onclick="go('menu')">MENU</button></div>`}};
+function render(){const st=ui.scrollTop;ui.style.display='block';$('ctl').style.display='none';ui.innerHTML=SCR[scr]();ui.scrollTop=st}
+function go(s){scr=s;if(s==='menu'||s==='up')PV=S.sel;if(s==='garage'){gi=BK.findIndex(b=>b.id===S.sel);PV=S.sel}render();ui.scrollTop=0}
+function pick(id){S.sel=id;save();render()}
+function buy(id){const b=BK.find(x=>x.id===id);if(S.coins<b.price)return toast('Duit tidak cukup!');S.coins-=b.price;S.own[id]=1;S.sel=id;toast('Dibeli: '+b.n);chk();render()}
+function upg(k){const id=S.sel,u=getUp(id),c=ucost(id,u[k]);if(S.coins<c)return toast('Duit tidak cukup!');S.coins-=c;u[k]++;chk();render()}
+function daily(){if(S.daily===day())return;S.daily=day();S.coins+=250;toast('🎁 +250 coins!');chk();render()}
+function launch(i){const c=CATS[i];startRace({dist:DS[selD],sk:c.sk,rw:c.rw,di:selD,name:c.n+' Race'})}
+function launchChamp(r){startRace({dist:DS[r],sk:[1.6,1.8,2][r],rw:700*(r+1),champ:1,r,name:'Championship R'+(r+1)})}
+/* ---------- INPUT & LOOP ---------- */
+const sh=()=>{if(scr==='race'&&R&&R.ph==='go'&&!R.over&&R.p.fin==null)shiftP()};
+const nOn=v=>{if(scr==='race'&&R&&R.ph==='go'&&R.p.fin==null)R.p.nitOn=v&&R.p.nit>0?1:0};
+$('bs').addEventListener('pointerdown',e=>{e.preventDefault();sh()});
+$('bn').addEventListener('pointerdown',e=>{e.preventDefault();nOn(1)});
+['pointerup','pointerleave','pointercancel'].forEach(ev=>$('bn').addEventListener(ev,()=>nOn(0)));
+addEventListener('keydown',e=>{if(e.repeat)return;if([' ','ArrowUp','Enter'].includes(e.key)&&scr==='race'){e.preventDefault();sh()}if(['n','N','Shift'].includes(e.key))nOn(1)});
+addEventListener('keyup',e=>{if(['n','N','Shift'].includes(e.key))nOn(0)});
+let last=0;
+function loop(ts){requestAnimationFrame(loop);const dt=Math.min(.05,(ts-last)/1000||0);last=ts;T+=dt;
+if(scr==='race'&&R){stepRace(dt);drawRace()}else{const q=$('pv');if(q)prev(q)}}
+load();go('menu');requestAnimationFrame(loop);
+</script></body></html>
